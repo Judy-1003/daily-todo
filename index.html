@@ -166,6 +166,10 @@ textarea.memo:focus{border-color:var(--accent);background:#fff}
 .selbar button{border:none;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer}
 .selbar .del{background:var(--hi);color:#fff}
 .selbar .cancel{background:rgba(255,255,255,.2);color:#fff}
+.toast{position:fixed;top:76px;left:50%;transform:translateX(-50%) translateY(-16px);
+  background:#2b2d3a;color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;z-index:80;
+  opacity:0;pointer-events:none;transition:.25s;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
 <body>
@@ -275,6 +279,7 @@ textarea.memo:focus{border-color:var(--accent);background:#fff}
   <button class="del" id="selDelete">删除选中</button>
   <button class="cancel" id="selCancelBtn">退出</button>
 </div>
+<div class="toast" id="toast"></div>
 <script>
 // SCRIPT_BODY
 const $=id=>document.getElementById(id);
@@ -291,6 +296,11 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 const dow=d=>`周${WD[(d.getDay()+6)%7]}`;
 const nowHM=()=>{const n=new Date();return `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;};
 const dayTasks=k=>store[k]||[];
+let toastTimer;
+function toast(msg){
+  const el=$('toast');el.textContent=msg;el.classList.add('show');
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2200);
+}
 function weekDays(d){
   const off=(d.getDay()+6)%7, mon=new Date(d); mon.setDate(d.getDate()-off);
   return Array.from({length:7},(_,i)=>{const x=new Date(mon);x.setDate(mon.getDate()+i);return x;});
@@ -495,14 +505,16 @@ $('memoClear').onclick=()=>{
   $('memo').value='';localStorage.setItem('workday.memo','');
 };
 // export / import
-$('exportBtn').onclick=()=>{
-  const data={tasks:store,memo:$('memo').value,exportedAt:new Date().toISOString()};
+function doExport(auto){
+  const data={tasks:store,memo:$('memo').value,exportedAt:new Date().toISOString(),version:1};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download=`工作日清单_${key(new Date())}.json`;
+  const tag=auto?'周备份':'手动';
+  a.download=`工作日清单_${tag}_${key(new Date())}.json`;
   a.click();URL.revokeObjectURL(a.href);
-};
+}
+$('exportBtn').onclick=()=>{doExport(false);toast('数据已导出 📤');};
 $('importBtn').onclick=()=>$('importFile').click();
 $('importFile').onchange=e=>{
   const f=e.target.files[0];if(!f)return;
@@ -557,13 +569,20 @@ document.addEventListener('click',e=>{
   if(e.target!==$('themeBtn')&&!$('themeMenu').contains(e.target))$('themeMenu').classList.remove('show');
 });
 applyTheme(themeId);
+// 每周自动导出：距上次备份满 7 天且有数据时，自动下载一份 JSON
+function weeklyAutoExport(){
+  const AK='workday.lastAutoExport', WEEK=7*24*3600*1000, now=Date.now();
+  const last=Number(localStorage.getItem(AK)||0);
+  if(!last){localStorage.setItem(AK,String(now));return;}      // 首次访问只记录时间
+  if(Object.keys(store).length && now-last>=WEEK){
+    doExport(true);
+    localStorage.setItem(AK,String(now));
+    toast('已自动完成每周数据备份 📦');
+  }
+}
 renderAll();
-
-
-
-
-
+weeklyAutoExport();
 </script>
 </body>
 </html>
-</div>
+
